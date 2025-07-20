@@ -3,25 +3,31 @@ import Player from './Player';
 import io from 'socket.io-client';
 import './App.css';
 
-const socket = io('http://localhost:3001');
-
 function App() {
-  const [player, setPlayer] = useState({ x: 50, y: 50, id: socket.id });
+  const [player, setPlayer] = useState(null);
   const [players, setPlayers] = useState({});
+  const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    socket.on('currentPlayers', (players) => {
+    const newSocket = io('http://localhost:3001');
+    setSocket(newSocket);
+
+    newSocket.on('connect', () => {
+      setPlayer({ x: 50, y: 50, id: newSocket.id });
+    });
+
+    newSocket.on('currentPlayers', (players) => {
       setPlayers(players);
     });
 
-    socket.on('newPlayer', (player) => {
+    newSocket.on('newPlayer', (player) => {
       setPlayers((prevPlayers) => ({
         ...prevPlayers,
         [player.id]: player,
       }));
     });
 
-    socket.on('disconnect', (playerId) => {
+    newSocket.on('disconnect', (playerId) => {
       setPlayers((prevPlayers) => {
         const newPlayers = { ...prevPlayers };
         delete newPlayers[playerId];
@@ -29,15 +35,24 @@ function App() {
       });
     });
 
-    socket.on('move', (player) => {
+    newSocket.on('move', (player) => {
       setPlayers((prevPlayers) => ({
         ...prevPlayers,
         [player.id]: player,
       }));
     });
 
+    return () => {
+      newSocket.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+
     const handleKeyDown = (e) => {
       setPlayer((prevPlayer) => {
+        if (!prevPlayer) return null;
         let newPlayer;
         switch (e.key) {
           case 'w':
@@ -65,14 +80,16 @@ function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [socket]);
 
   return (
     <div className="App">
-      <Player x={player.x} y={player.y} />
-      {Object.values(players).map((p) => (
-        <Player key={p.id} x={p.x} y={p.y} />
-      ))}
+      {player && <Player x={player.x} y={player.y} />}
+      {Object.values(players)
+        .filter((p) => p.id !== (player ? player.id : ''))
+        .map((p) => (
+          <Player key={p.id} x={p.x} y={p.y} />
+        ))}
     </div>
   );
 }
